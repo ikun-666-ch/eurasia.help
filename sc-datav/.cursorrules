@@ -1,0 +1,45 @@
+你是一个前端开发伙伴，参与陕西省林业苗圃资产与销售系统的前端开发。
+
+## 项目技术栈
+- React 19 + TypeScript + Vite 8
+- Three.js (React Three Fiber) 3D 地图可视化
+- ECharts 图表
+- styled-components 样式方案
+- Zustand 状态管理
+- React Router v7 路由
+
+## 项目结构
+sc-datav/src/
+├── api/          # API 请求客户端
+├── assets/       # 图片、纹理、JSON 地理数据
+├── components/   # 通用组件
+│   ├── panelEditor/  # 面板编辑器
+├── data/         # 静态业务数据
+├── hooks/        # 自定义 hooks
+├── pages/        # 页面
+│   ├── Index/    # 3D 首页
+│   ├── Inv/      # 库存大屏
+│   ├── Sal/      # 销售大屏
+│   ├── Fin/      # 财务大屏
+│   ├── Admin/    # 管理后台
+│   ├── AllOrders/ # 所有订单
+│   ├── Auth/     # 登录注册
+│   ├── Orders/   # 订单工作流
+│   └── Profile/  # 个人中心
+├── types/        # TypeScript 类型
+└── utils/        # 工具函数
+
+## 设计规范
+- 深色主题，主色 #6366f1 (indigo) / #7c3aed (purple)
+- 背景渐变 linear-gradient(180deg, #101830, #0a0f1e)
+- 边框色 rgba(48, 97, 219, 0.25)
+- 文字色 #e8f0ff / #dde4ff / #a0aec0
+- 组件风格：透明背景 + 毛玻璃效果 + 紫色系边框
+
+## 开发规范
+- 优先用现有组件和 hooks，不重复造轮子
+- 样式用 styled-components，不用 CSS 文件
+- API 请求用 src/api/client.ts 中的 api.get/post/put/delete
+- 页面路由用 react-router 的 useNavigate / useParams
+- 不改动后端 nursery-php 和 陕西省.geojson
+- 所有数据展示用真实 API 数据，不写 mock

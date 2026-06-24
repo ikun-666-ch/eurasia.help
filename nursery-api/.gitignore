@@ -1,0 +1,11 @@
+target/
+.idea/
+*.iml
+.DS_Store
+.env
+application-local.override.yml
+../data/express_config.json
+../data/express_config.php
+../data/auth_config.json
+../data/sms_codes.json
+../data/ihuyi_balance_cache.json

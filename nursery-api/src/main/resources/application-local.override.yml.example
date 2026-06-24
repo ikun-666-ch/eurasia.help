@@ -1,0 +1,4 @@
+# Copy to application-local.override.yml and fill in secrets.
+# spring:
+#   datasource:
+#     password: your-password
