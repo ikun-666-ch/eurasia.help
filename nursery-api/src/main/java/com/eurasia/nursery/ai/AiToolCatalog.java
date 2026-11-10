@@ -4,6 +4,7 @@ import com.eurasia.nursery.common.BusinessException;
 import com.eurasia.nursery.domain.model.UserView;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -18,6 +19,7 @@ public class AiToolCatalog implements AiToolExecutor {
     private final List<AiTool> tools;
     private final Map<String, AiTool> byName;
 
+    @Autowired
     public AiToolCatalog(
             ObjectMapper objectMapper,
             InventoryAiTools inventory,
