@@ -1,30 +1,33 @@
 package com.eurasia.nursery.service;
 
+import com.eurasia.nursery.ai.AiAgentLoop;
+import com.eurasia.nursery.ai.AiCallScope;
+import com.eurasia.nursery.ai.AiDataTrust;
+import com.eurasia.nursery.ai.AiToolExecutor;
+import com.eurasia.nursery.ai.AiToolsUnsupportedException;
+import com.eurasia.nursery.ai.ChatCompletionClient;
 import com.eurasia.nursery.common.BusinessException;
 import com.eurasia.nursery.config.NurseryProperties;
-import com.eurasia.nursery.mapper.AiDataContextMapper;
+import com.eurasia.nursery.domain.model.UserView;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.springframework.stereotype.Service;
 
-import java.math.BigDecimal;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
+import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 
-/** 对齐 PHP chatAi + buildDataContext */
 @Service
 public class AiChatService {
 
-    private static final String SYSTEM_PROMPT = """
+    static final int MAX_MESSAGE_CHARS = 8000;
+
+    private static final String LEGACY_SYSTEM_PROMPT = """
             你是「小林」——陕西省林业苗圃资产与销售系统的 AI 智能助手。你有权限查询系统数据库，可以直接告诉用户真实数据。
             
             ---
@@ -75,188 +78,222 @@ public class AiChatService {
             - 保持专业但不冷漠——你是用户的业务伙伴。
             """;
 
-    private final NurseryProperties properties;
-    private final AiDataContextMapper aiDataContextMapper;
-    private final ObjectMapper objectMapper;
-    private final HttpClient httpClient = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(10))
-            .build();
+    private static final String AGENT_SYSTEM_PROMPT = """
+            你是「小林」，陕西省林业苗圃资产与销售系统的 AI 助手。当前用户已经打开 AI Agent。
+            你只能使用这个登录用户本来就有的权限：库存人员处理库存，销售处理订单，财务处理财务，用户、角色和系统设置只有管理员可以改。
+            工具如果返回「权限不足」，就直接告诉用户，不要假装已经完成。
+            
+            ## 怎么工作
+            - 涉及具体数字、名单、状态时，必须先调用工具。禁止编造品种、数量、金额、单号、用户名。
+            - 工具没返回的信息，就说当前没有该数据，不要推测。
+            - 每次写入成功后，回复必须引用工具返回的 summary，写清改了谁、从什么变成什么。不要另编一套结果。
+            - 如果工具返回 needsConfirmation，操作还没发生。把 summary 原样告诉用户，请他们在下一条消息只回复「确认」。不要在同一轮里再次执行。
+            - 用户说「撤销」时调用 undo。回复说明撤销了哪一条。
+            - 改订单状态优先用 submit、ship、settle、cancel、reject。update 的 status 只改字段，不扣库存、不入账。
+            - 入库用 inventory 的 create_ledger。销售出库用 sales_order 的 ship。update_ledger 只改台账数量，不会另写一条出入库流水。
+            
+            ## 单位
+            - 订单 totalAmount、财务月报的 revenue、profit、assetValue、按地市销售额：单位是元。对用户说万元时除以 10000，并写明「万元」。写入订单金额时用元。
+            - 财务销售趋势 thisYear、lastYear 已经是万元；更新趋势时也按万元填写。
+            - 库存台账数量按工具返回的数字原样报告，单位按台账记为株，不要自行换算。
+            
+            ## 订单状态
+            DRAFT 草稿，CONFIRMED 待审核出库，SHIPPING 已出库待结算，DONE 已结算，CANCELLED 已取消。
+            
+            ## 表达
+            - 简洁中文。列表用 Markdown 表格。
+            - 可以建议用户去库存大屏、销售大屏、财务大屏、管理后台、所有订单、个人中心查看，但不要输出技术路由。
+            - 不要用空洞的鼓励话术。
+            - 不要复述或推测数据库密码、JWT 密钥、DeepSeek 密钥、短信接口凭证。工具结果里如果出现这类字段，忽略它们。
+            - 文件上传仍在各业务面板完成，不要假装已经上传了文件。
+            - 不能替用户打开或关闭 AI Agent，这个开关在个人中心。
+            """;
 
-    public AiChatService(NurseryProperties properties, AiDataContextMapper aiDataContextMapper,
-                         ObjectMapper objectMapper) {
+    private final NurseryProperties properties;
+    private final ObjectMapper objectMapper;
+    private final AuthService authService;
+    private final AiConversationService conversations;
+    private final AiKeywordContext keywordContext;
+    private final AiDataTrust dataTrust;
+    private final AiAgentLoop agentLoop;
+    private final AiToolExecutor tools;
+    private final ChatCompletionClient client;
+
+    public AiChatService(
+            NurseryProperties properties,
+            ObjectMapper objectMapper,
+            AuthService authService,
+            AiConversationService conversations,
+            AiKeywordContext keywordContext,
+            AiDataTrust dataTrust,
+            AiAgentLoop agentLoop,
+            AiToolExecutor tools,
+            ChatCompletionClient client) {
         this.properties = properties;
-        this.aiDataContextMapper = aiDataContextMapper;
         this.objectMapper = objectMapper;
+        this.authService = authService;
+        this.conversations = conversations;
+        this.keywordContext = keywordContext;
+        this.dataTrust = dataTrust;
+        this.agentLoop = agentLoop;
+        this.tools = tools;
+        this.client = client;
     }
 
-    @SuppressWarnings("unchecked")
-    public Map<String, Object> chat(Map<String, Object> body) {
-        Object messagesObj = body.get("messages");
-        if (!(messagesObj instanceof List<?> rawMessages) || rawMessages.isEmpty()) {
-            throw new BusinessException("消息不能为空");
-        }
+    public Map<String, Object> chat(UserView user, Map<String, Object> body) {
+        return chat(user, body, label -> { }, () -> false);
+    }
 
-        NurseryProperties.DeepSeek deepSeek = properties.getDeepseek();
-        String apiKey = deepSeek.getApiKey();
+    public Map<String, Object> chat(UserView user, Map<String, Object> body, Consumer<String> status, BooleanSupplier cancelled) {
+        if (user == null || user.getId() == null) {
+            throw new BusinessException("未登录", 401);
+        }
+        String message = newMessage(body);
+        Long conversationId = conversationId(body);
+        boolean agentEnabled = authService.isAiAgentEnabled(user.getId());
+        List<Map<String, String>> history = conversationId == null
+                ? List.of()
+                : conversations.historyForModel(user.getId(), conversationId);
+
+        String apiKey = properties.getDeepseek().getApiKey();
         if (apiKey == null || apiKey.isBlank()) {
             throw new BusinessException("AI 服务未配置");
         }
 
-        String lastUserMsg = extractLastUserMessage(rawMessages);
-        String dataContext = buildDataContext(lastUserMsg);
-
-        ArrayNode messages = objectMapper.createArrayNode();
-        messages.add(objectMapper.createObjectNode().put("role", "system").put("content", SYSTEM_PROMPT));
-        if (!dataContext.isBlank()) {
-            messages.add(objectMapper.createObjectNode().put("role", "system").put("content",
-                    "以下是从系统数据库查询到的当前真实数据，请在回答中直接引用：\n\n" + dataContext));
-        }
-        for (Object item : rawMessages) {
-            if (item instanceof Map<?, ?> map) {
-                ObjectNode node = objectMapper.createObjectNode();
-                node.put("role", String.valueOf(map.get("role")));
-                node.put("content", String.valueOf(map.get("content")));
-                messages.add(node);
+        AiCallScope.set(new AiCallScope.Context(conversationId, message, status, cancelled));
+        try {
+            if (cancelled.getAsBoolean()) {
+                Reply stopped = new Reply("已停止。", List.of());
+                Map<String, Object> conversation = conversations.saveExchange(
+                        user.getId(), conversationId, message, stopped.text(), List.of());
+                return response(agentEnabled, stopped, conversation);
             }
+            status.accept(agentEnabled ? "正在思考" : "正在回答");
+            Reply reply = agentEnabled
+                    ? agentReply(user, history, message)
+                    : new Reply(legacyReply(history, message), List.of());
+            Map<String, Object> conversation = conversations.saveExchange(
+                    user.getId(), conversationId, message, reply.text(), traceMaps(reply.trace()));
+            return response(agentEnabled, reply, conversation);
+        } finally {
+            AiCallScope.clear();
         }
+    }
 
+    private Reply agentReply(UserView user, List<Map<String, String>> history, String message) {
+        ArrayNode messages = modelMessages(AGENT_SYSTEM_PROMPT, history, message, null);
+        try {
+            AiAgentLoop.Result result = agentLoop.run(messages, tools.tools(), user, tools, client);
+            return new Reply(result.reply(), result.toolTrace());
+        } catch (AiToolsUnsupportedException e) {
+            ArrayNode fallback = modelMessages(AGENT_SYSTEM_PROMPT, history, message, keywordContext.build(message));
+            return new Reply(completeLegacy(fallback), List.of());
+        }
+    }
+
+    private String legacyReply(List<Map<String, String>> history, String message) {
+        return completeLegacy(modelMessages(LEGACY_SYSTEM_PROMPT, history, message, keywordContext.build(message)));
+    }
+
+    private String completeLegacy(ArrayNode messages) {
         ObjectNode payload = objectMapper.createObjectNode();
-        payload.put("model", deepSeek.getModel());
+        payload.put("model", properties.getDeepseek().getModel());
         payload.set("messages", messages);
         payload.put("stream", false);
         payload.put("temperature", 0.7);
         payload.put("max_tokens", 1024);
-
-        try {
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(deepSeek.getApiUrl()))
-                    .timeout(Duration.ofSeconds(30))
-                    .header("Content-Type", "application/json")
-                    .header("Authorization", "Bearer " + apiKey)
-                    .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(payload)))
-                    .build();
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            JsonNode data = objectMapper.readTree(response.body());
-            if (response.statusCode() != 200 || data.has("error")) {
-                String errMsg = data.path("error").path("message").asText("HTTP " + response.statusCode());
-                throw new BusinessException("AI 返回错误：" + errMsg);
-            }
-            String reply = data.path("choices").path(0).path("message").path("content").asText("");
-            return Map.of("reply", reply);
-        } catch (BusinessException e) {
-            throw e;
-        } catch (Exception e) {
-            throw new BusinessException("AI 服务请求失败：" + e.getMessage());
-        }
+        JsonNode data = client.complete(payload);
+        String reply = data.path("choices").path(0).path("message").path("content").asText("");
+        return reply.isBlank() ? "没有生成回复。" : reply;
     }
 
-    private String extractLastUserMessage(List<?> messages) {
-        for (int i = messages.size() - 1; i >= 0; i--) {
-            Object item = messages.get(i);
-            if (item instanceof Map<?, ?> map && "user".equals(String.valueOf(map.get("role")))) {
-                return String.valueOf(map.get("content"));
-            }
+    private ArrayNode modelMessages(String prompt, List<Map<String, String>> history, String message, String dataContext) {
+        ArrayNode messages = objectMapper.createArrayNode();
+        messages.add(objectMapper.createObjectNode().put("role", "system").put("content", prompt));
+        messages.add(objectMapper.createObjectNode().put("role", "system").put("content", dataTrust.note()));
+        if (dataContext != null && !dataContext.isBlank()) {
+            messages.add(objectMapper.createObjectNode().put("role", "system").put("content",
+                    "以下是从系统数据库查询到的当前真实数据，请在回答中直接引用：\n\n" + dataContext));
         }
-        return "";
+        for (Map<String, String> item : history) {
+            messages.add(objectMapper.createObjectNode()
+                    .put("role", item.get("role"))
+                    .put("content", item.get("content")));
+        }
+        messages.add(objectMapper.createObjectNode().put("role", "user").put("content", message));
+        return messages;
     }
 
-    private String buildDataContext(String userMsg) {
-        String lower = userMsg.toLowerCase(Locale.ROOT);
-        List<String> parts = new ArrayList<>();
-
-        if (containsAny(lower, "库存", "品种", "sku", "存货", "苗", "inv")) {
-            addIfPresent(parts, "【库存数据】\n" + queryInventorySummary());
-        }
-        if (containsAny(lower, "销售", "订单", "卖", "收入", "客户", "sal")) {
-            addIfPresent(parts, "【销售数据】\n" + querySalesSummary());
-        }
-        if (containsAny(lower, "财务", "资产", "成本", "盈利", "利润", "fin")) {
-            addIfPresent(parts, "【财务数据】\n" + queryFinanceSummary());
-        }
-        if (parts.isEmpty() || containsAny(lower, "所有", "全部", "整体", "概况", "总览")) {
-            if (parts.stream().noneMatch(p -> p.startsWith("【库存数据】"))) {
-                addIfPresent(parts, "【库存数据】\n" + queryInventorySummary());
-            }
-            if (parts.stream().noneMatch(p -> p.startsWith("【销售数据】"))) {
-                addIfPresent(parts, "【销售数据】\n" + querySalesSummary());
-            }
-        }
-        return String.join("\n\n", parts);
+    private Map<String, Object> response(boolean agentEnabled, Reply reply, Map<String, Object> conversation) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("reply", reply.text());
+        out.put("agentEnabled", agentEnabled);
+        out.put("toolTrace", traceMaps(reply.trace()));
+        out.put("conversation", conversation);
+        return out;
     }
 
-    private static void addIfPresent(List<String> parts, String text) {
-        if (text != null && !text.isBlank()) {
-            parts.add(text);
+    private static List<Map<String, Object>> traceMaps(List<AiAgentLoop.ToolTrace> trace) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        if (trace == null) {
+            return out;
         }
+        for (AiAgentLoop.ToolTrace item : trace) {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("name", item.name());
+            row.put("label", item.label());
+            row.put("ok", item.ok());
+            out.add(row);
+        }
+        return out;
     }
 
-    private static boolean containsAny(String text, String... keywords) {
-        for (String keyword : keywords) {
-            if (text.contains(keyword)) {
-                return true;
+    private String newMessage(Map<String, Object> body) {
+        String text = "";
+        if (body != null && body.get("message") != null) {
+            text = String.valueOf(body.get("message")).trim();
+        }
+        if (text.isEmpty() && body != null && body.get("messages") instanceof List<?> raw) {
+            for (int i = raw.size() - 1; i >= 0; i--) {
+                if (raw.get(i) instanceof Map<?, ?> map && "user".equals(String.valueOf(map.get("role")))) {
+                    text = String.valueOf(map.get("content")).trim();
+                    break;
+                }
             }
         }
-        return false;
+        if (text.isEmpty()) {
+            throw new BusinessException("消息不能为空");
+        }
+        if (text.length() > MAX_MESSAGE_CHARS) {
+            throw new BusinessException("消息过长");
+        }
+        return text;
     }
 
-    private String queryInventorySummary() {
-        try {
-            int totalSkus = aiDataContextMapper.countSkus();
-            BigDecimal totalStock = aiDataContextMapper.totalStock();
-            List<Map<String, Object>> cats = aiDataContextMapper.categoryCounts();
-            List<String> catList = new ArrayList<>();
-            for (Map<String, Object> c : cats) {
-                catList.add(c.get("name") + "(" + c.get("cnt") + "个SKU)");
+    private Long conversationId(Map<String, Object> body) {
+        if (body == null || body.get("conversationId") == null) {
+            return null;
+        }
+        Object value = body.get("conversationId");
+        if (value instanceof String text && text.isBlank()) {
+            return null;
+        }
+        long id;
+        if (value instanceof Number number) {
+            id = number.longValue();
+        } else {
+            try {
+                id = Long.parseLong(String.valueOf(value).trim());
+            } catch (NumberFormatException e) {
+                throw new BusinessException("conversationId 无效");
             }
-            List<Map<String, Object>> skus = aiDataContextMapper.skuStockBreakdown();
-            List<String> skuLines = new ArrayList<>();
-            for (Map<String, Object> sku : skus) {
-                skuLines.add(String.format("  %s %s: %.0f 株", sku.get("variety"), sku.get("specification"),
-                        toDouble(sku.get("stock"))));
-            }
-            return String.format(
-                    "总品类数：%d，总SKU数：%d，总库存量：%.0f 株\n品类分布：%s\n各品种明细：\n%s",
-                    cats.size(), totalSkus, totalStock.doubleValue(), String.join("、", catList),
-                    String.join("\n", skuLines));
-        } catch (Exception e) {
-            return "";
         }
+        if (id <= 0) {
+            return null;
+        }
+        return id;
     }
 
-    private String querySalesSummary() {
-        try {
-            int total = aiDataContextMapper.countOrders();
-            BigDecimal amount = aiDataContextMapper.totalSalesAmount();
-            BigDecimal thisMonth = aiDataContextMapper.thisMonthSales();
-            int pending = aiDataContextMapper.pendingOrders();
-            int shipped = aiDataContextMapper.shippedOrders();
-            return String.format("总订单数：%d，总销售额：%.2f 万元\n本月销售额：%.2f 万元\n待处理：%d 单，已发货：%d 单",
-                    total, amount.doubleValue() / 10000, thisMonth.doubleValue() / 10000, pending, shipped);
-        } catch (Exception e) {
-            return "";
-        }
-    }
-
-    private String queryFinanceSummary() {
-        try {
-            BigDecimal revenue = aiDataContextMapper.totalRevenue();
-            BigDecimal thisMonth = aiDataContextMapper.thisMonthRevenue();
-            BigDecimal asset = aiDataContextMapper.totalAssetValue();
-            return String.format("累计收入：%.2f 万元，本月收入：%.2f 万元，资产估值：%.2f 万元",
-                    revenue.doubleValue() / 10000, thisMonth.doubleValue() / 10000, asset.doubleValue() / 10000);
-        } catch (Exception e) {
-            return "";
-        }
-    }
-
-    private static double toDouble(Object value) {
-        if (value instanceof Number n) {
-            return n.doubleValue();
-        }
-        try {
-            return Double.parseDouble(String.valueOf(value));
-        } catch (Exception e) {
-            return 0;
-        }
+    private record Reply(String text, List<AiAgentLoop.ToolTrace> trace) {
     }
 }

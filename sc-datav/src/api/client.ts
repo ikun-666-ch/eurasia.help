@@ -1,6 +1,6 @@
 import type { ApiResponse } from "./types";
 
-const API_BASE = import.meta.env.VITE_API_BASE ?? "/api";
+export const API_BASE = import.meta.env.VITE_API_BASE ?? "/api";
 
 let token: string | null =
   typeof localStorage !== "undefined"

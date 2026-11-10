@@ -17,6 +17,10 @@ export default function ProfileMenu() {
           <span>修改手机号</span>
           <span>›</span>
         </MenuBtn>
+        <MenuBtn to="/profile/ai">
+          <span>AI 助手</span>
+          <span>›</span>
+        </MenuBtn>
         <MenuBtn to="/profile/logout" $danger>
           <span>退出登录</span>
           <span>›</span>

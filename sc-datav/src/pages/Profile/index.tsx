@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes } from "react-router";
+import ProfileAi from "./ProfileAi";
 import ProfileInfo from "./ProfileInfo";
 import ProfileLogout from "./ProfileLogout";
 import ProfileMenu from "./ProfileMenu";
@@ -12,6 +13,7 @@ export default function ProfileRoutes() {
       <Route path="info" element={<ProfileInfo />} />
       <Route path="password" element={<ProfilePassword />} />
       <Route path="phone" element={<ProfilePhone />} />
+      <Route path="ai" element={<ProfileAi />} />
       <Route path="logout" element={<ProfileLogout />} />
       <Route path="*" element={<Navigate to="/profile" replace />} />
     </Routes>

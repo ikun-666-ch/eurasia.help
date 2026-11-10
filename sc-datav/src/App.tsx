@@ -7,6 +7,7 @@ import RequireAuth from "@/components/RequireAuth";
 import RequireSalesWorkflow from "@/components/RequireSalesWorkflow";
 import RequirePageAccess from "@/components/RequirePageAccess";
 import { PanelRefreshProvider } from "@/components/panelEditor/PanelRefreshContext";
+import AiAssistantHost from "@/components/AiAssistantHost";
 import Admin from "./pages/Admin";
 import Auth from "./pages/Auth";
 import Register from "./pages/Auth/Register";
@@ -152,6 +153,7 @@ function App() {
             }
           />
         </Routes>
+        <AiAssistantHost />
       </div>
     </PanelRefreshProvider>
   );

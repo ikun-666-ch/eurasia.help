@@ -30,6 +30,40 @@ export interface UserProfile {
   defaultPages: string[];
   extraPages: string[];
   pageAccess: string[];
+  aiAgentEnabled?: boolean;
+}
+
+export interface AiToolTrace {
+  name: string;
+  label: string;
+  ok: boolean;
+}
+
+export interface AiConversation {
+  id: number;
+  title: string;
+  archived?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface AiStoredMessage {
+  id: number;
+  role: "user" | "assistant" | string;
+  content: string;
+  toolTrace?: AiToolTrace[];
+  createdAt?: string;
+}
+
+export interface AiConversationDetail extends AiConversation {
+  messages: AiStoredMessage[];
+}
+
+export interface AiChatResult {
+  reply: string;
+  agentEnabled: boolean;
+  toolTrace: AiToolTrace[];
+  conversation: AiConversation;
 }
 
 export type UpdateProfileResult = UserProfile & { token?: string };

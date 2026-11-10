@@ -13,6 +13,7 @@ public interface SysUserMapper {
             SELECT u.id, u.username, u.display_name AS displayName, u.password_hash AS passwordHash,
                    u.role_id AS roleId, u.status, u.last_login_at AS lastLoginAt, u.phone,
                    u.extra_page_access AS extraPageAccess,
+                   CASE WHEN u.ai_agent_enabled = 1 THEN 1 ELSE 0 END AS aiAgentEnabled,
                    r.code AS roleCode, r.name AS roleName
             FROM sys_user u JOIN sys_role r ON r.id = u.role_id
             WHERE u.username = #{username} LIMIT 1
@@ -23,6 +24,7 @@ public interface SysUserMapper {
             SELECT u.id, u.username, u.display_name AS displayName, u.password_hash AS passwordHash,
                    u.role_id AS roleId, u.status, u.last_login_at AS lastLoginAt, u.phone,
                    u.extra_page_access AS extraPageAccess,
+                   CASE WHEN u.ai_agent_enabled = 1 THEN 1 ELSE 0 END AS aiAgentEnabled,
                    r.code AS roleCode, r.name AS roleName
             FROM sys_user u JOIN sys_role r ON r.id = u.role_id
             WHERE u.phone = #{phone} LIMIT 1
@@ -33,6 +35,7 @@ public interface SysUserMapper {
             SELECT u.id, u.username, u.display_name AS displayName, u.password_hash AS passwordHash,
                    u.role_id AS roleId, u.status, u.last_login_at AS lastLoginAt, u.phone,
                    u.extra_page_access AS extraPageAccess,
+                   CASE WHEN u.ai_agent_enabled = 1 THEN 1 ELSE 0 END AS aiAgentEnabled,
                    r.code AS roleCode, r.name AS roleName
             FROM sys_user u JOIN sys_role r ON r.id = u.role_id
             WHERE u.id = #{id} LIMIT 1
@@ -92,6 +95,7 @@ public interface SysUserMapper {
             SELECT u.id, u.username, u.display_name AS displayName, u.password_hash AS passwordHash,
                    u.role_id AS roleId, u.status, u.last_login_at AS lastLoginAt, u.phone,
                    u.extra_page_access AS extraPageAccess,
+                   CASE WHEN u.ai_agent_enabled = 1 THEN 1 ELSE 0 END AS aiAgentEnabled,
                    r.code AS roleCode, r.name AS roleName
             FROM sys_user u JOIN sys_role r ON r.id = u.role_id
             ORDER BY u.id
@@ -117,4 +121,10 @@ public interface SysUserMapper {
 
     @Select("SELECT id FROM sys_role WHERE id = #{roleId}")
     Long roleExists(Long roleId);
+
+    @Select("SELECT CASE WHEN ai_agent_enabled = 1 THEN 1 ELSE 0 END FROM sys_user WHERE id = #{id}")
+    Integer findAiAgentEnabled(Long id);
+
+    @Update("UPDATE sys_user SET ai_agent_enabled = #{enabled} WHERE id = #{id}")
+    int updateAiAgentEnabled(@Param("id") Long id, @Param("enabled") int enabled);
 }

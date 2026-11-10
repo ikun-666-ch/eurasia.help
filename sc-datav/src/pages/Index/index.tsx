@@ -1,4 +1,4 @@
-import { useRef, useState, type ComponentProps } from "react";
+import { useRef, type ComponentProps } from "react";
 import styled from "styled-components";
 import {
   Canvas,
@@ -23,7 +23,6 @@ import { useNavigate } from "react-router";
 import { hasPageAccess } from "@/api/client";
 import { HOME_CAROUSEL } from "@/utils/pageAccess";
 import Bg from "./bg";
-import AiChat from "@/components/AiChat";
 
 const SettingsBtn = styled.button`
   position: absolute;
@@ -59,111 +58,6 @@ const SettingsBtn = styled.button`
     fill: currentColor;
   }
 `;
-
-const AiAssistant = styled.button`
-  position: absolute;
-  bottom: 120px;
-  right: 36px;
-  z-index: 20;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 56px;
-  height: 56px;
-  padding: 0;
-  border: none;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #6366f1, #8b5cf6, #a855f7);
-  color: #ffffff;
-  cursor: pointer;
-  box-shadow:
-    0 0 20px rgba(99, 102, 241, 0.4),
-    0 0 40px rgba(139, 92, 246, 0.2),
-    0 4px 16px rgba(0, 0, 0, 0.4);
-  transition:
-    transform 0.3s ease,
-    box-shadow 0.3s ease;
-  animation: ai-pulse 2.5s ease-in-out infinite;
-
-  &::before {
-    content: "";
-    position: absolute;
-    inset: -4px;
-    border-radius: 50%;
-    border: 2px solid rgba(139, 92, 246, 0.35);
-    animation: ai-ring 3s ease-in-out infinite;
-  }
-
-  @keyframes ai-pulse {
-    0%,
-    100% {
-      box-shadow:
-        0 0 20px rgba(99, 102, 241, 0.4),
-        0 0 40px rgba(139, 92, 246, 0.2),
-        0 4px 16px rgba(0, 0, 0, 0.4);
-    }
-    50% {
-      box-shadow:
-        0 0 32px rgba(99, 102, 241, 0.6),
-        0 0 60px rgba(139, 92, 246, 0.35),
-        0 4px 18px rgba(0, 0, 0, 0.5);
-    }
-  }
-
-  @keyframes ai-ring {
-    0%,
-    100% {
-      opacity: 0.6;
-      transform: scale(1);
-    }
-    50% {
-      opacity: 1;
-      transform: scale(1.08);
-    }
-  }
-
-  &:hover {
-    transform: scale(1.08);
-    box-shadow:
-      0 0 36px rgba(99, 102, 241, 0.7),
-      0 0 64px rgba(139, 92, 246, 0.4),
-      0 4px 20px rgba(0, 0, 0, 0.5);
-  }
-
-  svg {
-    width: 28px;
-    height: 28px;
-  }
-
-  &::after {
-    content: "点我进入AI助手";
-    position: absolute;
-    bottom: calc(100% + 10px);
-    right: 0;
-    white-space: nowrap;
-    padding: 6px 14px;
-    border-radius: 8px;
-    background: rgba(20, 20, 40, 0.9);
-    color: #e8e8ff;
-    font-size: 13px;
-    font-weight: 500;
-    letter-spacing: 0.04em;
-    backdrop-filter: blur(8px);
-    border: 1px solid rgba(139, 92, 246, 0.35);
-    opacity: 0;
-    transform: translateY(6px);
-    pointer-events: none;
-    transition:
-      opacity 0.25s ease,
-      transform 0.25s ease;
-  }
-
-  &:hover::after {
-    opacity: 1;
-    transform: translateY(0);
-  }
-`;
-
 
 const PageTitle = styled.div`
   position: absolute;
@@ -264,7 +158,6 @@ const Circle = styled.circle`
 
 export default function Index() {
   const navigate = useNavigate();
-  const [chatOpen, setChatOpen] = useState(false);
 
   return (
     <>
@@ -310,17 +203,7 @@ export default function Index() {
           <Circle cx="20" cy="15" r="3" fill="currentColor" />
         </svg>
       </WheelDrop>
-      <AiAssistant
-        type="button"
-        title="AI 智能助手"
-        aria-label="AI 智能助手"
-        onClick={() => setChatOpen(true)}>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-          <path d="M12 2L9.5 9.5L2 12L9.5 14.5L12 22L14.5 14.5L22 12L14.5 9.5Z" />
-        </svg>
-      </AiAssistant>
     </Wrapper>
-      {chatOpen && <AiChat onClose={() => setChatOpen(false)} />}
     </>
   );
 }

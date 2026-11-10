@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router";
 import styled from "styled-components";
 import { createSalesOrder, fetchSalesCustomers, fetchSkuCatalog } from "@/api";
+import { ApiError } from "@/api/client";
 import type { CustomerRow } from "@/api/types";
 import { SHAANXI_CITY_DISTRICTS } from "@/data/shaanxiCityDistricts";
 import { SHANXI_CITIES } from "@/pages/Inv/constants";

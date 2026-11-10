@@ -15,6 +15,8 @@ public class UserView {
     private LocalDateTime lastLoginAt;
     private String phone;
     private String extraPageAccess;
+    /** 1 = 该用户已启用 AI Agent。缺省或 0 都视为关闭。 */
+    private Integer aiAgentEnabled;
 
     public Long getId() {
         return id;
@@ -102,5 +104,17 @@ public class UserView {
 
     public void setExtraPageAccess(String extraPageAccess) {
         this.extraPageAccess = extraPageAccess;
+    }
+
+    public Integer getAiAgentEnabled() {
+        return aiAgentEnabled;
+    }
+
+    public void setAiAgentEnabled(Integer aiAgentEnabled) {
+        this.aiAgentEnabled = aiAgentEnabled;
+    }
+
+    public boolean agentEnabled() {
+        return aiAgentEnabled != null && aiAgentEnabled != 0;
     }
 }
