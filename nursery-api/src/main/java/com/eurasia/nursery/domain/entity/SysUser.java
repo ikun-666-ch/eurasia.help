@@ -35,6 +35,9 @@ public class SysUser {
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 
+    @Column(name = "ai_agent_enabled", nullable = false)
+    private boolean aiAgentEnabled = false;
+
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
     public String getUsername() { return username; }
@@ -51,4 +54,6 @@ public class SysUser {
     public void setLastLoginAt(LocalDateTime lastLoginAt) { this.lastLoginAt = lastLoginAt; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+    public boolean isAiAgentEnabled() { return aiAgentEnabled; }
+    public void setAiAgentEnabled(boolean aiAgentEnabled) { this.aiAgentEnabled = aiAgentEnabled; }
 }

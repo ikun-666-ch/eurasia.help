@@ -199,6 +199,55 @@ export const Msg = styled.p<{ $error?: boolean }>`
   border: 1px solid ${(p) => (p.$error ? "rgba(248, 113, 113, 0.35)" : "rgba(34, 197, 94, 0.35)")};
 `;
 
+export const SwitchRow = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+`;
+
+export const SwitchLabel = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+
+  strong {
+    font-size: 15px;
+    font-weight: 600;
+  }
+
+  span {
+    font-size: 12px;
+    color: rgba(186, 206, 255, 0.65);
+  }
+`;
+
+export const SwitchButton = styled.button<{ $on: boolean }>`
+  width: 52px;
+  height: 30px;
+  padding: 3px;
+  border-radius: 999px;
+  border: 1px solid ${(p) => (p.$on ? "rgba(125, 211, 252, 0.7)" : "rgba(255,255,255,0.16)")};
+  background: ${(p) => (p.$on ? "#3061db" : "rgba(255,255,255,0.08)")};
+  cursor: pointer;
+  flex-shrink: 0;
+
+  &:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  span {
+    display: block;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #fff;
+    transform: translateX(${(p) => (p.$on ? "22px" : "0")});
+    transition: transform 0.2s ease;
+  }
+`;
+
 export const Hint = styled.p`
   margin: 0 0 16px;
   font-size: 13px;

@@ -277,6 +277,23 @@ public class AuthService {
         return profilePayload(current);
     }
 
+    /** 以数据库为准，不接受客户端自行声明。 */
+    public boolean isAiAgentEnabled(long userId) {
+        Integer flag = sysUserMapper.findAiAgentEnabled(userId);
+        return flag != null && flag != 0;
+    }
+
+    public Map<String, Object> updateAiAgentEnabled(UserView current, Map<String, Object> body) {
+        if (body == null || !body.containsKey("enabled")) {
+            throw new BusinessException("缺少 enabled");
+        }
+        boolean enabled = parseEnabled(body.get("enabled"));
+        if (sysUserMapper.updateAiAgentEnabled(current.getId(), enabled ? 1 : 0) == 0) {
+            throw new BusinessException("用户不存在");
+        }
+        return Map.of("aiAgentEnabled", enabled);
+    }
+
     public Map<String, Object> updateProfile(UserView current, Map<String, Object> body) {
         boolean usernameChanged = false;
         String newUsername = current.getUsername();
@@ -425,7 +442,19 @@ public class AuthService {
         String phone = user.getPhone() == null ? "" : user.getPhone();
         payload.put("phone", phone);
         payload.put("phoneMasked", phone.isEmpty() ? "" : maskPhone(phone));
+        payload.put("aiAgentEnabled", user.agentEnabled());
         return payload;
+    }
+
+    static boolean parseEnabled(Object value) {
+        if (value instanceof Boolean b) {
+            return b;
+        }
+        if (value instanceof Number n) {
+            return n.intValue() != 0;
+        }
+        String text = value == null ? "" : String.valueOf(value).trim();
+        return "1".equals(text) || "true".equalsIgnoreCase(text) || "yes".equalsIgnoreCase(text) || "on".equalsIgnoreCase(text);
     }
 
     private String maskPhone(String phone) {

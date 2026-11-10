@@ -1,4 +1,4 @@
-import { getToken } from "./client";
+import { API_BASE, ApiError, getToken } from "./client";
 import { api, setToken, setRoleCode, setPageAccess } from "./client";
 import type {
   CategoryNode,
@@ -30,6 +30,9 @@ import type {
   UpdateProfileResult,
   UserProfile,
   UserRow,
+  AiChatResult,
+  AiConversation,
+  AiConversationDetail,
 } from "./types";
 
 export async function login(username: string, password: string) {
@@ -120,6 +123,9 @@ export function logout() {
   setToken(null);
   setRoleCode(null);
   setPageAccess(null);
+  if (typeof localStorage !== "undefined") {
+    localStorage.removeItem("nursery_ai_conversation");
+  }
 }
 
 export async function authLogout() {
@@ -132,6 +138,90 @@ export async function authLogout() {
 }
 
 export const fetchProfile = () => api.get<UserProfile>("/auth/me");
+
+export const updateAiAgent = (enabled: boolean) =>
+  api.put<{ aiAgentEnabled: boolean }>("/auth/ai-agent", { enabled });
+
+export const fetchAiConversations = (q?: string, archived = false) => {
+  const params = new URLSearchParams();
+  if (q && q.trim()) params.set("q", q.trim());
+  if (archived) params.set("archived", "true");
+  const suffix = params.toString();
+  return api.get<AiConversation[]>(`/ai/conversations${suffix ? `?${suffix}` : ""}`);
+};
+
+export const fetchAiConversation = (id: number) =>
+  api.get<AiConversationDetail>(`/ai/conversations/${id}`);
+
+export const deleteAiConversation = (id: number) =>
+  api.delete<void>(`/ai/conversations/${id}`);
+
+export const renameAiConversation = (id: number, title: string) =>
+  api.put<AiConversation>(`/ai/conversations/${id}`, { title });
+
+export const archiveAiConversation = (id: number, archived: boolean) =>
+  api.put<AiConversation>(`/ai/conversations/${id}/archive`, { archived });
+
+export async function streamAiChat(
+  body: { conversationId?: number | null; message: string },
+  onStatus: (label: string) => void,
+  signal: AbortSignal
+): Promise<AiChatResult> {
+  const headers = new Headers({ "Content-Type": "application/json" });
+  const token = getToken();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/ai/chat/stream`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+      signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") throw error;
+    throw new ApiError("无法连接后端，请检查 /api/ 是否已配置并可访问");
+  }
+  if (!res.ok || !res.body) {
+    const text = await res.text();
+    try {
+      const json = JSON.parse(text) as { message?: string };
+      throw new ApiError(json.message || `请求失败 (${res.status})`);
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+      throw new ApiError(`请求失败 (${res.status})`);
+    }
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let result: AiChatResult | null = null;
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const chunks = buffer.split("\n\n");
+    buffer = chunks.pop() ?? "";
+    for (const chunk of chunks) {
+      let event = "message";
+      let data = "";
+      for (const line of chunk.split("\n")) {
+        if (line.startsWith("event:")) event = line.slice(6).trim();
+        else if (line.startsWith("data:")) data += line.slice(5).trim();
+      }
+      if (!data) continue;
+      const parsed = JSON.parse(data) as { label?: string; message?: string };
+      if (event === "status" && parsed.label) onStatus(parsed.label);
+      if (event === "error") throw new ApiError(parsed.message || "请求失败");
+      if (event === "done") result = parsed as AiChatResult;
+    }
+  }
+  if (!result) throw new ApiError("没有收到回复");
+  return result;
+}
+
+export const sendAiChat = (body: { conversationId?: number | null; message: string }) =>
+  api.post<AiChatResult>("/ai/chat", body);
 
 export const updateProfile = async (body: {
   username?: string;

@@ -104,6 +104,11 @@ public class AuthController {
         return ApiResponse.ok(authService.updateProfile(RequestUser.require(request), body), "资料已更新");
     }
 
+    @PutMapping("/ai-agent")
+    public ApiResponse<Map<String, Object>> updateAiAgent(HttpServletRequest request, @RequestBody Map<String, Object> body) {
+        return ApiResponse.ok(authService.updateAiAgentEnabled(RequestUser.require(request), body));
+    }
+
     @PutMapping("/password")
     public ApiResponse<Void> changePassword(HttpServletRequest request, @RequestBody Map<String, Object> body) {
         authService.changePassword(
